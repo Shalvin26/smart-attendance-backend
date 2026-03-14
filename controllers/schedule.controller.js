@@ -11,23 +11,32 @@ const generateSubjectSchedule = async (req, res) => {
       return res.status(404).json({ error: 'Subject not found' });
     }
 
-    // Make sure teacher owns this subject
     if (subject.teacherId.toString() !== req.user.userId) {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
-    // Check if schedule already generated
-    // Only block if there are upcoming lectures already
-    const existing = await Schedule.findOne({ 
-    subjectId: subject._id,
-    status: 'upcoming'
+    // Check if there are upcoming lectures already
+    const existing = await Schedule.findOne({
+      subjectId: subject._id,
+      status: 'upcoming'
     });
     if (existing) {
-    return res.status(400).json({ error: 'Schedule already generated for this subject' });
-}
+      return res.status(400).json({ error: 'Schedule already generated for this subject' });
+    }
+
+    // Get all dates that already have conducted lectures
+    const conductedSchedules = await Schedule.find({
+      subjectId: subject._id,
+      status: 'conducted'
+    });
+
+    // Extract conducted dates as strings for easy comparison
+    const conductedDates = conductedSchedules.map(s =>
+      new Date(s.date).toDateString()
+    );
 
     // Generate all lecture entries
-    const schedules = generateSchedule(
+    const allSchedules = generateSchedule(
       subject.semesterStart,
       subject.semesterEnd,
       subject.lectureDays,
@@ -35,18 +44,23 @@ const generateSubjectSchedule = async (req, res) => {
       subject.teacherId
     );
 
-    if (schedules.length === 0) {
-      return res.status(400).json({ error: 'No lectures generated, check semester dates and lecture days' });
+    // Filter out dates that already have conducted lectures
+    const newSchedules = allSchedules.filter(s =>
+      !conductedDates.includes(new Date(s.date).toDateString())
+    );
+
+    if (newSchedules.length === 0) {
+      return res.status(400).json({ error: 'No new lectures to generate' });
     }
 
-    // Bulk insert — single DB operation
-    await Schedule.insertMany(schedules);
+    // Bulk insert only new schedules
+    await Schedule.insertMany(newSchedules);
 
     res.status(201).json({
       message: 'Schedule generated successfully',
-      totalLectures: schedules.length,
-      firstLecture: schedules[0].date,
-      lastLecture: schedules[schedules.length - 1].date
+      totalLectures: newSchedules.length,
+      firstLecture: newSchedules[0].date,
+      lastLecture: newSchedules[newSchedules.length - 1].date
     });
 
   } catch (error) {
