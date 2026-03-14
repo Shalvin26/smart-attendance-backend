@@ -2,7 +2,7 @@ const Schedule = require('../models/Schedule');
 const Subject = require('../models/Subject');
 const generateSchedule = require('../utils/scheduleGenerator');
 
-// schedule generating 
+// ============ GENERATE SCHEDULE ============
 const generateSubjectSchedule = async (req, res) => {
   try {
     const subject = await Subject.findById(req.params.subjectId);
@@ -24,14 +24,15 @@ const generateSubjectSchedule = async (req, res) => {
       return res.status(400).json({ error: 'Schedule already generated for this subject' });
     }
 
-    // Get all dates that already have conducted lectures
-    const conductedSchedules = await Schedule.find({
+    // Get all dates that already have conducted OR rescheduled lectures
+    // These are protected — never overwrite them
+    const protectedSchedules = await Schedule.find({
       subjectId: subject._id,
-      status: 'conducted'
+      status: { $in: ['conducted', 'rescheduled'] }
     });
 
-    // Extract conducted dates as strings for easy comparison
-    const conductedDates = conductedSchedules.map(s =>
+    // Extract protected dates as strings for easy comparison
+    const protectedDates = protectedSchedules.map(s =>
       new Date(s.date).toDateString()
     );
 
@@ -44,9 +45,9 @@ const generateSubjectSchedule = async (req, res) => {
       subject.teacherId
     );
 
-    // Filter out dates that already have conducted lectures
+    // Filter out protected dates — never create upcoming on conducted or rescheduled dates
     const newSchedules = allSchedules.filter(s =>
-      !conductedDates.includes(new Date(s.date).toDateString())
+      !protectedDates.includes(new Date(s.date).toDateString())
     );
 
     if (newSchedules.length === 0) {
@@ -68,11 +69,11 @@ const generateSubjectSchedule = async (req, res) => {
   }
 };
 
-//  schedule  (for calendar)
+// ============ GET SCHEDULE (for calendar) ============
 const getSchedule = async (req, res) => {
   try {
     const schedules = await Schedule.find({ subjectId: req.params.subjectId })
-      .sort({ date: 1 }); // ascending order
+      .sort({ date: 1 });
 
     res.status(200).json({ schedules });
 
@@ -81,6 +82,7 @@ const getSchedule = async (req, res) => {
   }
 };
 
+// ============ CANCEL LECTURE ============
 const cancelLecture = async (req, res) => {
   try {
     const schedule = await Schedule.findById(req.params.scheduleId);
@@ -97,6 +99,10 @@ const cancelLecture = async (req, res) => {
       return res.status(400).json({ error: 'Cannot cancel a conducted lecture' });
     }
 
+    if (schedule.status === 'cancelled') {
+      return res.status(400).json({ error: 'Lecture is already cancelled' });
+    }
+
     schedule.status = 'cancelled';
     await schedule.save();
 
@@ -107,7 +113,7 @@ const cancelLecture = async (req, res) => {
   }
 };
 
-// lecture reschudeling
+// ============ RESCHEDULE LECTURE ============
 const rescheduleLecture = async (req, res) => {
   try {
     const { newDate } = req.body;
@@ -126,6 +132,24 @@ const rescheduleLecture = async (req, res) => {
       return res.status(400).json({ error: 'Cannot reschedule a conducted lecture' });
     }
 
+    // Check if new date already has a conducted or rescheduled lecture
+    const conflict = await Schedule.findOne({
+      subjectId: schedule.subjectId,
+      status: { $in: ['conducted', 'rescheduled'] },
+      $expr: {
+        $eq: [
+          { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
+          { $dateToString: { format: "%Y-%m-%d", date: new Date(newDate) } }
+        ]
+      }
+    });
+
+    if (conflict) {
+      return res.status(400).json({ 
+        error: 'This date already has a conducted or rescheduled lecture' 
+      });
+    }
+
     schedule.date = new Date(newDate);
     schedule.status = 'rescheduled';
     await schedule.save();
@@ -138,4 +162,3 @@ const rescheduleLecture = async (req, res) => {
 };
 
 module.exports = { generateSubjectSchedule, getSchedule, cancelLecture, rescheduleLecture };
- 
