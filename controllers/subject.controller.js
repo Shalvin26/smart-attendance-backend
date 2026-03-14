@@ -176,7 +176,10 @@ const updateSubject = async (req, res) => {
 
     // If schedule-related fields changed, delete old schedule
     if (semesterStart || semesterEnd || lectureDays) {
-      await Schedule.deleteMany({ subjectId: req.params.id });
+     await Schedule.deleteMany({ 
+        subjectId: req.params.id,
+        status: { $in: ['upcoming', 'cancelled'] }
+      });
     }
 
     res.status(200).json({
