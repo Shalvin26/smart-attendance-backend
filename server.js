@@ -18,7 +18,7 @@ const app = express();
 //app.use(helmet());
 app.use(cors({
   origin: [
-    'smart-attendance-frontend-rho.vercel.app',
+    'https://smart-attendance-frontend-rho.vercel.app',
     'http://localhost:5173'
   ],
   credentials: true
