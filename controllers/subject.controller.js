@@ -178,7 +178,7 @@ const updateSubject = async (req, res) => {
     if (semesterStart || semesterEnd || lectureDays) {
      await Schedule.deleteMany({ 
         subjectId: req.params.id,
-        status: { $in: ['upcoming', 'cancelled'] }
+        status: { $in: ['upcoming', 'cancelled', 'rescheduled'] }
       });
     }
 

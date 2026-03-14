@@ -17,10 +17,14 @@ const generateSubjectSchedule = async (req, res) => {
     }
 
     // Check if schedule already generated
-    const existing = await Schedule.findOne({ subjectId: subject._id });
+    // Only block if there are upcoming lectures already
+    const existing = await Schedule.findOne({ 
+    subjectId: subject._id,
+    status: 'upcoming'
+    });
     if (existing) {
-      return res.status(400).json({ error: 'Schedule already generated for this subject' });
-    }
+    return res.status(400).json({ error: 'Schedule already generated for this subject' });
+}
 
     // Generate all lecture entries
     const schedules = generateSchedule(
