@@ -23,6 +23,10 @@ const scheduleSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
+  originalDate: {
+    type: Date,
+    default: null
+  },
   status: {
     type: String,
     enum: ['upcoming', 'conducted', 'cancelled', 'rescheduled'],

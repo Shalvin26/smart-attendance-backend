@@ -10,25 +10,28 @@ router.get('/:subjectId', authMiddleware, getSchedule);
 router.patch('/:scheduleId/cancel', authMiddleware, roleMiddleware('teacher'), cancelLecture);
 router.patch('/:scheduleId/reschedule', authMiddleware, roleMiddleware('teacher'), rescheduleLecture);
 
-// ============ CLEANUP ROUTE ============
-// Run once to fix existing duplicate upcoming lectures on conducted dates
-// Remove this route after running once
 router.delete('/cleanup/:subjectId', authMiddleware, roleMiddleware('teacher'), async (req, res) => {
   try {
-    // Get all conducted dates for this subject
-    const conducted = await Schedule.find({
+    // Get all rescheduled and cancelled lectures with original dates
+    const usedSchedules = await Schedule.find({
       subjectId: req.params.subjectId,
-      status: 'conducted'
+      status: { $in: ['conducted', 'rescheduled', 'cancelled'] }
     });
 
-    const conductedDates = conducted.map(s =>
-      new Date(s.date).toDateString()
-    );
+    // Build list of all blocked dates
+    const blockedDates = [];
+    usedSchedules.forEach(s => {
+      blockedDates.push(new Date(s.date).toDateString());
+      if (s.originalDate) {
+        blockedDates.push(new Date(s.originalDate).toDateString());
+      }
+    });
 
-    // Delete any upcoming lecture that falls on a conducted date
-    // Never touch rescheduled lectures
+    // Remove duplicates
+    const uniqueBlockedDates = [...new Set(blockedDates)];
+
     let deleted = 0;
-    for (const date of conductedDates) {
+    for (const date of uniqueBlockedDates) {
       const result = await Schedule.deleteMany({
         subjectId: req.params.subjectId,
         status: 'upcoming',
@@ -50,5 +53,4 @@ router.delete('/cleanup/:subjectId', authMiddleware, roleMiddleware('teacher'), 
     res.status(500).json({ error: 'Server error' });
   }
 });
-
 module.exports = router;

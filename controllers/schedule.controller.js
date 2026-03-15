@@ -24,17 +24,25 @@ const generateSubjectSchedule = async (req, res) => {
       return res.status(400).json({ error: 'Schedule already generated for this subject' });
     }
 
-    // Get all dates that already have conducted OR rescheduled lectures
-    // These are protected — never overwrite them
+    // Get all protected schedules — conducted, rescheduled, cancelled
     const protectedSchedules = await Schedule.find({
       subjectId: subject._id,
-      status: { $in: ['conducted', 'rescheduled'] }
+      status: { $in: ['conducted', 'rescheduled', 'cancelled'] }
     });
 
-    // Extract protected dates as strings for easy comparison
-    const protectedDates = protectedSchedules.map(s =>
-      new Date(s.date).toDateString()
-    );
+    // Block both current date AND original date
+    const protectedDates = [];
+    protectedSchedules.forEach(s => {
+      // Block current date
+      protectedDates.push(new Date(s.date).toDateString());
+      // Block original date if exists (date it was rescheduled or cancelled FROM)
+      if (s.originalDate) {
+        protectedDates.push(new Date(s.originalDate).toDateString());
+      }
+    });
+
+    // Remove duplicates
+    const uniqueProtectedDates = [...new Set(protectedDates)];
 
     // Generate all lecture entries
     const allSchedules = generateSchedule(
@@ -45,9 +53,9 @@ const generateSubjectSchedule = async (req, res) => {
       subject.teacherId
     );
 
-    // Filter out protected dates — never create upcoming on conducted or rescheduled dates
+    // Filter out all protected dates
     const newSchedules = allSchedules.filter(s =>
-      !protectedDates.includes(new Date(s.date).toDateString())
+      !uniqueProtectedDates.includes(new Date(s.date).toDateString())
     );
 
     if (newSchedules.length === 0) {
@@ -68,7 +76,6 @@ const generateSubjectSchedule = async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 };
-
 // ============ GET SCHEDULE (for calendar) ============
 const getSchedule = async (req, res) => {
   try {
@@ -101,6 +108,11 @@ const cancelLecture = async (req, res) => {
 
     if (schedule.status === 'cancelled') {
       return res.status(400).json({ error: 'Lecture is already cancelled' });
+    }
+
+    // Save original date before cancelling
+    if (!schedule.originalDate) {
+      schedule.originalDate = schedule.date;
     }
 
     schedule.status = 'cancelled';
