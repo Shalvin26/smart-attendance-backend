@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const BRANCHES = ['CSE', 'ECE', 'ME', 'CE', 'EE', 'IT', 'CHE'];
+const BRANCHES = ['CSE', 'Mechanical', 'EE', 'EC', 'Material Science', 'Chemical', 'Civil'];
 
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
