@@ -2,31 +2,20 @@ const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-// regsiter one user
 const register = async (req, res) => {
   try {
-    const { name, email, password, role, rollNumber } = req.body;
+    const { name, email, password, role, rollNumber, branch, collegeName } = req.body;
 
-    // Check if user already exists
     const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ error: 'Email already registered' });
-    }
+    if (existingUser) return res.status(400).json({ error: 'Email already registered' });
 
-    // Hash the password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // user creation with hashed password
     const user = await User.create({
-      name,
-      email,
-      password: hashedPassword,
-      role,
-      rollNumber
+      name, email, password: hashedPassword, role, rollNumber, branch, collegeName
     });
 
-    // Generate token
     const token = jwt.sign(
       { userId: user._id, role: user.role },
       process.env.JWT_SECRET,
@@ -37,16 +26,13 @@ const register = async (req, res) => {
       message: 'User registered successfully',
       token,
       user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        rollNumber: user.rollNumber
+        id: user._id, name: user.name, email: user.email,
+        role: user.role, rollNumber: user.rollNumber,
+        branch: user.branch, collegeName: user.collegeName
       }
     });
 
   } catch (error) {
-    // Mongoose validation error
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map(e => e.message);
       return res.status(400).json({ error: messages });
@@ -55,24 +41,16 @@ const register = async (req, res) => {
   }
 };
 
-//login if user already exists
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Check user exists
     const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(400).json({ error: 'Invalid email or password' });
-    }
+    if (!user) return res.status(400).json({ error: 'Invalid email or password' });
 
-    // Check password
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ error: 'Invalid email or password' });
-    }
+    if (!isMatch) return res.status(400).json({ error: 'Invalid email or password' });
 
-    // Generate token
     const token = jwt.sign(
       { userId: user._id, role: user.role },
       process.env.JWT_SECRET,
@@ -83,11 +61,9 @@ const login = async (req, res) => {
       message: 'Login successful',
       token,
       user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        rollNumber: user.rollNumber
+        id: user._id, name: user.name, email: user.email,
+        role: user.role, rollNumber: user.rollNumber,
+        branch: user.branch, collegeName: user.collegeName
       }
     });
 
@@ -96,10 +72,18 @@ const login = async (req, res) => {
   }
 };
 
+// Returns only students matching teacher's college + branch
 const getStudents = async (req, res) => {
   try {
-    const students = await User.find({ role: 'student' })
-      .select('name email rollNumber');
+    const teacher = await User.findById(req.user.userId);
+    if (!teacher) return res.status(404).json({ error: 'Teacher not found' });
+
+    const students = await User.find({
+      role: 'student',
+      branch: teacher.branch,
+      collegeName: teacher.collegeName
+    }).select('name email rollNumber branch collegeName');
+
     res.status(200).json({ students });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
